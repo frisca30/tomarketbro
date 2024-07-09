@@ -1,318 +1,328 @@
-import requests
-import time
-from colorama import Fore, Style, init
+import os
+import sys
 import json
-from datetime import datetime, timedelta, timezone
+import time
 import random
-import urllib.parse
+import argparse
+import requests
+from base64 import b64decode, urlsafe_b64decode
+from datetime import datetime
+from urllib.parse import parse_qs
+from colorama import init, Fore, Style
 
-headers = {
-    'accept': 'application/json, text/plain, */*',
-    'accept-language': 'en,en-US;q=0.9',
-    'cache-control': 'no-cache',
-    'content-type': 'application/json',
-    'origin': 'https://mini-app.tomarket.ai',
-    'pragma': 'no-cache',
-    'priority': 'u=1, i',
-    'referer': 'https://mini-app.tomarket.ai/',
-    'sec-ch-ua': '"Not/A)Brand";v="8", "Chromium";v="126", "Android WebView";v="126"',
-    'sec-ch-ua-mobile': '?1',
-    'sec-ch-ua-platform': 'Android',
-    'sec-fetch-dest': 'empty',
-    'sec-fetch-mode': 'cors',
-    'sec-fetch-site': 'same-site',
-    'user-agent': 'Mozilla/5.0 (Linux; Android 13; M2012K11AG Build/TKQ1.220829.002; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/126.0.6478.134 Mobile Safari/537.36',
-    'x-requested-with': 'org.telegram.messenger.web'
-}
+merah = Fore.LIGHTRED_EX
+kuning = Fore.LIGHTYELLOW_EX
+hijau = Fore.LIGHTGREEN_EX
+biru = Fore.LIGHTBLUE_EX
+putih = Fore.LIGHTWHITE_EX
+hitam = Fore.LIGHTBLACK_EX
+reset = Style.RESET_ALL
+line = putih + "~" * 50
 
-# get token
-def get_access_token(query_data):
-    url = 'https://api-web.tomarket.ai/tomarket-game/v1/user/login'
-    try:
+
+class Tomartod:
+    def __init__(self):
+        self.headers = {
+            "host": "api-web.tomarket.ai",
+            "connection": "keep-alive",
+            "accept": "application/json, text/plain, */*",
+            "user-agent": "Mozilla/5.0 (Linux; Android 10; Redmi 4A / 5A Build/QQ3A.200805.001; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/86.0.4240.185 Mobile Safari/537.36",
+            "content-type": "application/json",
+            "origin": "https://mini-app.tomarket.ai",
+            "x-requested-with": "tw.nekomimi.nekogram",
+            "sec-fetch-site": "same-site",
+            "sec-fetch-mode": "cors",
+            "sec-fetch-dest": "empty",
+            "referer": "https://mini-app.tomarket.ai/",
+            "accept-language": "en-US,en;q=0.9",
+        }
+        self.marinkitagawa = lambda data: {
+            key: value[0] for key, value in parse_qs(data).items()
+        }
+
+    def set_authorization(self, auth):
+        self.headers["authorization"] = auth
+
+    def del_authorization(self):
+        if "authorization" in self.headers.keys():
+            self.headers.pop("authorization")
+
+    def login(self, data):
+        url = "https://api-web.tomarket.ai/tomarket-game/v1/user/login"
         data = json.dumps(
             {
-                "init_data": query_data,
+                "init_data": data,
                 "invite_code": "",
-            })
-        response = requests.post(url, headers=headers, data=data)
-        # print(response.json())
-        response.raise_for_status() 
-        return response.json()
-    except json.JSONDecodeError:
-        print(f"JSON Decode Error: Query Anda Salah")
-        return None
-    except requests.RequestException as e:
-        print(f"Request Error: {e}")
-        return None
+            }
+        )
+        self.del_authorization()
+        res = self.http(url, self.headers, data)
+        if res.status_code != 200:
+            self.log(f"{merah}failed fetch token authorization, check http.log !")
+            return None
+        token = res.json()["data"]["access_token"]
+        return token
 
-def get_balance(token):
-    url = 'https://api-web.tomarket.ai/tomarket-game/v1/user/balance'
-    headers['Authorization'] = token
-    try:
-        response = requests.post(url, headers=headers)
-        response.raise_for_status()
-        return response.json()
-    except json.JSONDecodeError:
-        print(f"JSON Decode Error: Token Invalid")
-        return None
-    except requests.RequestException as e:
-        print(f"Request Error: {e}")
-        return None
+    def start_farming(self):
+        data = json.dumps({"game_id": "53b22103-c7ff-413d-bc63-20f6fb806a07"})
+        url = "https://api-web.tomarket.ai/tomarket-game/v1/farm/start"
+        res = self.http(url, self.headers, data)
+        if res.status_code != 200:
+            self.log(f"{merah}failed start farming, check http.log last line !")
+            return False
 
-def claim_daily(token):
-    url = 'https://api-web.tomarket.ai/tomarket-game/v1/daily/claim'
-    headers['Authorization'] = token
-    payload = {"game_id": "fa873d13-d831-4d6f-8aee-9cff7a1d0db1"}
+        data = res.json().get("data")
+        end_farming = data["end_at"]
+        format_end_farming = (
+            datetime.fromtimestamp(end_farming).isoformat(" ").split(".")[0]
+        )
+        self.log(f"{hijau}success start farming !")
 
-    try:
-        response = requests.post(url, headers=headers, json=payload)
-        response.raise_for_status()
-        return response.json(), response.status_code
-    except json.JSONDecodeError:
-        print(f"JSON Decode Error: Token Invalid")
-        return None, None
-    except requests.RequestException as e:
-        print(f"Request Error: {e}")
-        return None, None
+    def end_farming(self):
+        data = json.dumps({"game_id": "53b22103-c7ff-413d-bc63-20f6fb806a07"})
+        url = "https://api-web.tomarket.ai/tomarket-game/v1/farm/claim"
+        res = self.http(url, self.headers, data)
+        if res.status_code != 200:
+            self.log(f"{merah}failed start farming, check http.log last line !")
+            return False
 
-def start_farming(token):
-    url = 'https://api-web.tomarket.ai/tomarket-game/v1/farm/start'
-    headers['Authorization'] = token
-    payload = {"game_id": "53b22103-c7ff-413d-bc63-20f6fb806a07"}
-    try:
-        response = requests.post(url, headers=headers, json=payload)
-        response.raise_for_status()
-        return response.json(), response.status_code
-    except json.JSONDecodeError:
-        print(f"JSON Decode Error: Token Invalid")
-        return None, None
-    except requests.RequestException as e:
-        print(f"Request Error: {e}")
-        return None, None
+        poin = res.json()["data"]["claim_this_time"]
+        self.log(f"{hijau}success claim farming !")
+        self.log(f"{hijau}reward : {putih}{poin}")
+
+    def daily_claim(self):
+        url = "https://api-web.tomarket.ai/tomarket-game/v1/daily/claim"
+        data = json.dumps({"game_id": "fa873d13-d831-4d6f-8aee-9cff7a1d0db1"})
+        res = self.http(url, self.headers, data)
+        if res.status_code != 200:
+            self.log(f"{merah}failed claim daily sign,check http.log last line !")
+            return False
+
+        data = res.json().get("data")
+        if isinstance(data, str):
+            self.log(f"{kuning}maybe already singin")
+            return
+
+        poin = data.get("today_points")
+        self.log(
+            f"{hijau}success claim {biru}daily sign {hijau}reward : {putih}{poin} !"
+        )
+        return
+
+    def play_game_func(self, amount_pass):
+        data_game = json.dumps({"game_id": "59bcd12e-04e2-404c-a172-311a0084587d"})
+
+        start_url = "https://api-web.tomarket.ai/tomarket-game/v1/game/play"
+        claim_url = "https://api-web.tomarket.ai/tomarket-game/v1/game/claim"
+        for i in range(amount_pass):
+            res = self.http(start_url, self.headers, data_game)
+            if res.status_code != 200:
+                self.log(f"{merah}failed start game !")
+                return
+
+            self.log(f"{hijau}success {biru}start{hijau} game !")
+            self.countdown(30)
+            point = random.randint(self.game_low_point, self.game_high_point)
+            data_claim = json.dumps(
+                {"game_id": "59bcd12e-04e2-404c-a172-311a0084587d", "points": point}
+            )
+            res = self.http(claim_url, self.headers, data_claim)
+            if res.status_code != 200:
+                self.log(f"{merah}failed claim game point !")
+                continue
+
+            self.log(f"{hijau}success {biru}claim{hijau} game point : {putih}{point}")
+
+    def get_balance(self):
+        url = "https://api-web.tomarket.ai/tomarket-game/v1/user/balance"
+        while True:
+            res = self.http(url, self.headers, "")
+            data = res.json().get("data")
+            if data is None:
+                self.log(f"{merah}failed get data !")
+                return None
+
+            timestamp = data["timestamp"]
+            balance = data["available_balance"]
+            self.log(f"{hijau}balance : {putih}{balance}")
+            if "daily" not in data.keys():
+                self.daily_claim()
+                continue
+
+            if data["daily"] is None:
+                self.daily_claim()
+                continue
+
+            next_daily = data["daily"]["next_check_ts"]
+            if timestamp > next_daily:
+                self.daily_claim()
+
+            if "farming" not in data.keys():
+                self.log(f"{kuning}farming not started !")
+                result = self.start_farming()
+                continue
+
+            end_farming = data["farming"]["end_at"]
+            format_end_farming = (
+                datetime.fromtimestamp(end_farming).isoformat(" ").split(".")[0]
+            )
+            if timestamp > end_farming:
+                self.end_farming()
+                continue
+
+            self.log(f"{kuning}not time to claim !")
+            self.log(f"{kuning}end farming at : {putih}{format_end_farming}")
+            if self.play_game:
+                self.log(f"{hijau}auto play game is enable !")
+                play_pass = data.get("play_passes")
+                self.log(f"{hijau}game ticket : {putih}{play_pass}")
+                if int(play_pass) > 0:
+                    self.play_game_func(play_pass)
+                    continue
+
+            _next = end_farming - timestamp
+            return _next
+
+    def load_data(self, file):
+        datas = open(file).read().splitlines()
+        if len(datas) <= 0:
+            print(
+                f"{merah}0 account detected from {file}, fill your data in {file} first !{reset}"
+            )
+            sys.exit()
+
+        return datas
+
+    def load_config(self, file):
+        config = json.loads(open(file).read())
+        self.interval = config["interval"]
+        self.play_game = config["play_game"]
+        self.game_low_point = config["game_point"]["low"]
+        self.game_high_point = config["game_point"]["high"]
+
+    def save(self, id, token):
+        tokens = json.loads(open("tokens.json").read())
+        tokens[str(id)] = token
+        open("tokens.json", "w").write(json.dumps(tokens, indent=4))
+
+    def get(self, id):
+        tokens = json.loads(open("tokens.json").read())
+        if str(id) not in tokens.keys():
+            return None
+
+        return tokens[str(id)]
+
+    def is_expired(self, token):
+        header, payload, sign = token.split(".")
+        deload = urlsafe_b64decode(payload + "==").decode()
+        jeload = json.loads(deload)
+        now = int(datetime.now().timestamp())
+        if now > jeload["exp"]:
+            return True
+        return False
+
+    def http(self, url, headers, data=None):
+        while True:
+            try:
+                now = datetime.now().isoformat(" ").split(".")[0]
+                if data is None:
+                    res = requests.get(url, headers=headers)
+                    open("http.log", "a", encoding="utf-8").write(
+                        f"{now} - {res.status_code} - {res.text}\n"
+                    )
+                    return res
+
+                if data == "":
+                    res = requests.post(url, headers=headers)
+                    open("http.log", "a", encoding="utf-8").write(
+                        f"{now} - {res.status_code} - {res.text}\n"
+                    )
+                    return res
+
+                res = requests.post(url, headers=headers, data=data)
+                open("http.log", "a", encoding="utf-8").write(
+                    f"{now} - {res.status_code} - {res.text}\n"
+                )
+                return res
+            except (requests.exceptions.ConnectionError, requests.exceptions.Timeout):
+                print(f"{merah}connection error / connection timeout !")
+                time.sleep(1)
+                continue
+
+    def countdown(self, t):
+        for i in range(t, 0, -1):
+            menit, detik = divmod(i, 60)
+            jam, menit = divmod(menit, 60)
+            jam = str(jam).zfill(2)
+            menit = str(menit).zfill(2)
+            detik = str(detik).zfill(2)
+            print(f"{putih}waiting {jam}:{menit}:{detik}     ", flush=True, end="\r")
+            time.sleep(1)
+        print("                                        ", flush=True, end="\r")
+
+    def log(self, msg):
+        now = datetime.now().isoformat(" ").split(".")[0]
+        print(f"{hitam}[{now}]{reset} {msg}{reset}")
+
+    def main(self):
+        banner = f"""
+    {hijau}Auto Claim {biru}Tomarket_ai
     
-def claim_farming(token):
-    url = 'https://api-web.tomarket.ai/tomarket-game/v1/farm/claim'
-    headers['Authorization'] = token
-    payload = {"game_id": "53b22103-c7ff-413d-bc63-20f6fb806a07"}
-    try:
-        response = requests.post(url, headers=headers, json=payload)
-        response.raise_for_status()
-        return response.json(), response.status_code
-    except json.JSONDecodeError:
-        print(f"JSON Decode Error: Token Invalid")
-        return None, None
-    except requests.RequestException as e:
-        print(f"Request Error: {e}")
-        return None, None
-
-def play_game(token):
-    url = 'https://api-web.tomarket.ai/tomarket-game/v1/game/play'
-    headers['Authorization'] = token
-    payload = {"game_id": "59bcd12e-04e2-404c-a172-311a0084587d"}
-    try:
-        response = requests.post(url, headers=headers, json=payload)
-        response.raise_for_status()
-        return response.json(), response.status_code
-    except json.JSONDecodeError:
-        print(f"JSON Decode Error: Token Invalid")
-        return None, None
-    except requests.RequestException as e:
-        print(f"Request Error: {e}")
-        return None, None
-
-def claim_game(token,point):
-    url = 'https://api-web.tomarket.ai/tomarket-game/v1/game/claim'
-    headers['Authorization'] = token
-   
-    payload = {"game_id": "59bcd12e-04e2-404c-a172-311a0084587d", "points": point}
-    try:
-        response = requests.post(url, headers=headers, json=payload)
-        response.raise_for_status()
-        return response.json(), response.status_code
-    except json.JSONDecodeError:
-        print(f"JSON Decode Error: Token Invalid")
-        return None, None
-    except requests.RequestException as e:
-        print(f"Request Error: {e}")
-        return None, None
-
- 
-
-
-def main():
-    tokens = []
-    try:
-        with open('tokens.txt', 'r') as token_file:
-            tokens = token_file.readlines()
-    except FileNotFoundError:
-        pass
-    while True:
-        print_welcome_message()
-        try:
-            with open('query.txt', 'r') as file:
-                queries = file.readlines()
- 
-            for i, query_data in enumerate(queries):
-                query_data = query_data.strip()
-                if i < len(tokens):
-                    token = tokens[i].strip()
-                else:
-                    print(f"{Fore.YELLOW+Style.BRIGHT}Getting access token..", end="\r", flush=True)
-                    auth_response = get_access_token(query_data)
-                    if auth_response is not None:
-                        token = auth_response['data']['access_token']
-                        tokens.append(token)
-                        with open('tokens.txt', 'a') as token_file:
-                            token_file.write(token + '\n')
-                    else:
-                        print(f"{Fore.RED+Style.BRIGHT}Login Failed {Style.RESET_ALL}           ", flush=True)
+    {hijau}By: {putih}Murup
+    {hijau}GIthub: {putih}@frisca30
+    
+    {hijau}Message: {putih}dont't forget to 'git pull' maybe the script is updated 
+    
+        """
+        arg = argparse.ArgumentParser()
+        arg.add_argument("--data", default="data.txt")
+        arg.add_argument("--config", default="config.json")
+        arg.add_argument("--marinkitagawa", action="store_true")
+        args = arg.parse_args()
+        if not args.marinkitagawa:
+            os.system("cls" if os.name == "nt" else "clear")
+        print(banner)
+        self.load_config(args.config)
+        datas = self.load_data(args.data)
+        self.log(f"{biru}total account : {putih}{len(datas)}")
+        print(line)
+        while True:
+            list_countdown = []
+            _start = int(time.time())
+            for no, data in enumerate(datas):
+                parser = self.marinkitagawa(data)
+                user = json.loads(parser["user"])
+                id = user["id"]
+                self.log(
+                    f"{hijau}account number : {putih}{no+1}{hijau}/{putih}{len(datas)}"
+                )
+                self.log(f"{hijau}name : {putih}{user['first_name']}")
+                token = self.get(id)
+                if token is None:
+                    token = self.login(data)
+                    if token is None:
                         continue
-                print(f"{Fore.YELLOW+Style.BRIGHT}Checking account..", end="\r", flush=True)
-                
-                user_data = query_data.split('&')[0].split('=')[1]
-                user_info = urllib.parse.unquote(user_data)
-                user_info = user_info.replace('%22', '"').replace('%2C', ',').replace('%3A', ':').replace('%24', '$').replace('%23', '#')
-                user_info = json.loads(user_info)
-                
-                firstname = user_info.get('first_name', 'Unknown')
-                lastname = user_info.get('last_name', '')
-                print(Fore.CYAN + Style.BRIGHT + f"===== [ {firstname} {lastname} ] =====             ", flush=True)
-                print(f"{Fore.YELLOW+Style.BRIGHT}Getting balance..", end="\r", flush=True)
-                balance_response = get_balance(token)
-                # print(balance_response)
-                if balance_response is not None:
-                    balance = float(balance_response['data'].get('available_balance'))
-                    balance = int(balance)  # Convert to integer to remove decimal part
-                    tiket = balance_response['data'].get('play_passes')
-                    print(f"{Fore.GREEN+Style.BRIGHT}[ Balance ]: {balance} {Style.RESET_ALL}           ", flush=True)
-                    print(f"{Fore.GREEN+Style.BRIGHT}[ Tiket ]: {tiket} {Style.RESET_ALL}           ", flush=True)
-                    print(f"{Fore.YELLOW+Style.BRIGHT}[ Daily ]: Claiming.. {Style.RESET_ALL}", end="\r" ,flush=True)
-                    time.sleep(2)
-                    daily, daily_status_code = claim_daily(token)
-                    if daily_status_code == 400:
-                        if daily['message'] == 'already_check':
-                            day = daily['data']['check_counter']
-                            point = daily['data']['today_points']
-                            print(f"{Fore.GREEN+Style.BRIGHT}[ Daily ]: Day {day} Already checkin | {point} Point{Style.RESET_ALL}", flush=True)
-                        else:
-                            print(f"{Fore.RED+Style.BRIGHT}[ Daily ]: Gagal {daily} {Style.RESET_ALL}", flush=True)
-                    elif daily_status_code == 200:
-                        day = daily['data']['check_counter']
-                        point = daily['data']['today_points']
-                        print(f"{Fore.GREEN+Style.BRIGHT}[ Daily ]: Day {day} Claimed | {point} Point{Style.RESET_ALL}", flush=True)
-                    else:
-                        print(f"{Fore.RED+Style.BRIGHT}[ Daily ]: Gagal {daily} {Style.RESET_ALL}", flush=True)
+                    self.save(id, token)
 
-                    print(f"{Fore.YELLOW+Style.BRIGHT}[ Farming ]: Checking.. {Style.RESET_ALL}", end="\r", flush=True)
-                    time.sleep(2)
-                    farming, farming_status_code = start_farming(token)
-                    if farming_status_code == 200:
-                        end_time = datetime.fromtimestamp(farming['data']['end_at'])
-                        remaining_time = end_time - datetime.now()
-                        hours, remainder = divmod(remaining_time.total_seconds(), 3600)
-                        minutes, _ = divmod(remainder, 60)
-                        print(f"{Fore.GREEN+Style.BRIGHT}[ Farming ]: Started. Claim in: {int(hours)} jam {int(minutes)} menit {Style.RESET_ALL}", flush=True)
-                        if datetime.now() > end_time:
-                                print(f"{Fore.YELLOW+Style.BRIGHT}[ Farming ]: Claiming.. {Style.RESET_ALL}", end="\r", flush=True)
-                                claim_response, claim_status_code = claim_farming(token)
-                                if claim_status_code == 200:
-                                    poin = claim_response["data"]["claim_this_time"]
-                                    print(f"{Fore.GREEN+Style.BRIGHT}[ Farming ]: Success Claim Farming! Reward: {poin} {Style.RESET_ALL}       ", flush=True)
-                                    print(f"{Fore.YELLOW+Style.BRIGHT}[ Farming ]: Starting.. {Style.RESET_ALL}", end="\r", flush=True)
-                                    time.sleep(2)
-                                    farming, farming_status_code = start_farming(token)
-                                    if farming_status_code == 200:
-                                        end_time = datetime.fromtimestamp(farming['data']['end_at'])
-                                        remaining_time = end_time - datetime.now()
-                                        hours, remainder = divmod(remaining_time.total_seconds(), 3600)
-                                        minutes, _ = divmod(remainder, 60)
-                                        print(f"{Fore.GREEN+Style.BRIGHT}[ Farming ]: Started. Claim in: {int(hours)} jam {int(minutes)} menit {Style.RESET_ALL}", flush=True)
-
-                                else:
-                                    print(f"{Fore.RED+Style.BRIGHT}Failed to claim farming: {claim_response} {Style.RESET_ALL}          ", flush=True)
-                    elif farming_status_code == 500:
-                        if farming['message'] == 'game already started':
-                            end_time = datetime.fromtimestamp(farming['data']['end_at'])
-                            remaining_time = end_time - datetime.now()
-                            hours, remainder = divmod(remaining_time.total_seconds(), 3600)
-                            minutes, _ = divmod(remainder, 60)
-                            print(f"{Fore.CYAN+Style.BRIGHT}[ Farming ]: Already Started. Claim in: {int(hours)} jam {int(minutes)} menit {Style.RESET_ALL}", flush=True)
-                            
-                            # Check if current time is past end_time
-                            if datetime.now() > end_time:
-                                print(f"{Fore.YELLOW+Style.BRIGHT}[ Farming ]: Claiming.. {Style.RESET_ALL}", end="\r", flush=True)
-                                claim_response, claim_status_code = claim_farming(token)
-                                if claim_status_code == 200:
-                                    poin = claim_response["data"]["claim_this_time"]
-                                    print(f"{Fore.GREEN+Style.BRIGHT}Success claim farming! Reward: {poin} {Style.RESET_ALL}", flush=True)
-                                    print(f"{Fore.YELLOW+Style.BRIGHT}[ Farming ]: Starting.. {Style.RESET_ALL}", end="\r", flush=True)
-                                    time.sleep(2)
-                                    farming, farming_status_code = start_farming(token)
-                                    if farming_status_code == 200:
-                                        end_time = datetime.fromtimestamp(farming['data']['end_at'])
-                                        remaining_time = end_time - datetime.now()
-                                        hours, remainder = divmod(remaining_time.total_seconds(), 3600)
-                                        minutes, _ = divmod(remainder, 60)
-                                        print(f"{Fore.GREEN+Style.BRIGHT}[ Farming ]: Started. Claim in: {int(hours)} jam {int(minutes)} menit {Style.RESET_ALL}", flush=True)
-
-
-                                else:
-                                    print(f"{Fore.RED+Style.BRIGHT}Failed to claim farming: {claim_response} {Style.RESET_ALL}", flush=True)
-                        else:
-                            print(f"{Fore.GREEN+Style.BRIGHT}[ Farming ]: Error. {farming} {Style.RESET_ALL}", flush=True)
-                    else:
-                        print(f"{Fore.GREEN+Style.BRIGHT}[ Farming ]: Error {farming} {Style.RESET_ALL}", flush=True)
-                    
-                    while tiket > 0:
-                        print(f"{Fore.GREEN+Style.BRIGHT}[ Game ]: Starting Game..", end="\r", flush=True)
-                        play, play_status = play_game(token)
-                        if play_status != 200:
-                            print(f"{Fore.RED+Style.BRIGHT}[ Game ]: Failed to start game!       {Style.RESET_ALL}", flush=True)
-                        else:
-                            print(f"{Fore.GREEN+Style.BRIGHT}[ Game ]: Game Started! {Style.RESET_ALL}                      ", flush=True)
-                            for _ in range(30):
-                                print(f"{random.choice([Fore.RED, Fore.GREEN, Fore.YELLOW, Fore.BLUE, Fore.MAGENTA, Fore.CYAN, Fore.WHITE])+Style.BRIGHT}[ Game ]: Playing game, waktu sisa {30 - _} detik {Style.RESET_ALL}", end="\r", flush=True)
-                                time.sleep(1)
-                            print(f"{Fore.YELLOW+Style.BRIGHT}[ Game ]: Game Berakhir! Claiming..                                       ", end="\r", flush=True)
-                            point = random.randint(400, 600)
-                            claim, claim_status = claim_game(token, point)
-                            if claim_status != 200:
-                                print(f"{Fore.RED+Style.BRIGHT}[ Game ]: Failed to claim game points! {Style.RESET_ALL}", flush=True)
-                            else:
-                                print(f"{Fore.GREEN+Style.BRIGHT}[ Game ]: Success. Mendapatkan {point} Poin {Style.RESET_ALL}                    ", flush=True)
-
-                            tiket -= 1
-            print(Fore.BLUE + Style.BRIGHT + f"\n==========SEMUA AKUN TELAH DI PROSES==========\n",  flush=True)    
-            for _ in range(1800):
-                minutes, seconds = divmod(1800 - _, 60)
-                print(f"{random.choice([Fore.RED, Fore.GREEN, Fore.YELLOW, Fore.BLUE, Fore.MAGENTA, Fore.CYAN, Fore.WHITE])+Style.BRIGHT}==== [ Semua akun telah diproses, Looping berikutnya {minutes} menit {seconds} detik ] ===={Style.RESET_ALL}", end="\r", flush=True)
-                time.sleep(1)         
-        except Exception as e:
-            time.sleep(5)
-            print(f"An error occurred: {str(e)}")
-            print(f"Error occurred at: {datetime.now()}")  # Add this line to log the time of the error
-
-from datetime import datetime, timedelta, timezone
-start_time = datetime.now()
-def print_welcome_message():
-    print(r"""
-          
-█     █ █  █ ▄▄▄▄▄ █  █ ▄▄▄▄▄
-█ ▀ ▀ █ █  █ █ ▄▄█ █  █ █▄▄▄█
-█  ▀  █ █▄▄█ █  ▄  █▄▄█ █
-          """)
-    print(Fore.GREEN + Style.BRIGHT + "Tomarket BOT")
-    print(Fore.CYAN + Style.BRIGHT + "Update Link: https://github.com/frisca30/")
-    print(Fore.BLUE + Style.BRIGHT + "Belikan saya kopi :) 0881 0260 1020 05 DANA")
-    print(Fore.RED + Style.BRIGHT + "gausah mbok jual ! Ngotak dikit bos. Ngoding susah2 kau tinggal rename :)\n\n")
-    current_time = datetime.now()
-    up_time = current_time - start_time
-    days, remainder = divmod(up_time.total_seconds(), 86400)
-    hours, remainder = divmod(remainder, 3600)
-    minutes, seconds = divmod(remainder, 60)
-    print(Fore.CYAN + Style.BRIGHT + f"Up time bot: {int(days)} hari, {int(hours)} jam, {int(minutes)} menit, {int(seconds)} detik\n\n")
-
+                if self.is_expired(token):
+                    token = self.login(data)
+                    if token is None:
+                        continue
+                    self.save(id, token)
+                self.set_authorization(token)
+                result = self.get_balance()
+                print(line)
+                self.countdown(self.interval)
+                list_countdown.append(result)
+            _end = int(time.time())
+            _tot = _end - _start
+            _min = min(list_countdown) - _tot
+            self.countdown(_min)
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        app = Tomartod()
+        app.main()
+    except KeyboardInterrupt:
+        sys.exit()
